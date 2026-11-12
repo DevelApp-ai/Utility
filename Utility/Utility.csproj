@@ -5,13 +5,13 @@
     <AssemblyName>DevelApp.Utility</AssemblyName>
     <RootNamespace>DevelApp.Utility</RootNamespace>
     <Authors>Lars Shakya Buch-Jepsen</Authors>
-    <Company>DevelApp Denmark (CVR 33211740)</Company>
+    <Company>DevelApp.ai ApS (CVR 33211740)</Company>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <RepositoryUrl>https://github.com/DevelApp-dk/Utility</RepositoryUrl>
+    <RepositoryUrl>https://github.com/DevelApp-ai/Utility</RepositoryUrl>
     <RepositoryType>Git</RepositoryType>
-    <Copyright>Copyright © DevelApp 2020</Copyright>
-    <Description>Contains several Utlity classes used in several projects</Description>
-    <Version>1.0.7</Version>
+    <Copyright>Copyright © DevelApp.ai ApS 2020-2026</Copyright>
+    <Description>Contains several utility classes used in several projects</Description>
+    <Version>1.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,12 +1,17 @@
-﻿using DevelApp.Utility.Exceptions;
+using DevelApp.Utility.Exceptions;
 using System;
-using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
 namespace DevelApp.Utility.Model
 {
+    /// <summary>
+    /// An ASCII identifier: an ASCII letter followed by ASCII letters or numbers.
+    /// Implements value equality so instances can be used as dictionary keys.
+    /// </summary>
     public sealed class IdentifierString : IEquatable<IdentifierString>
     {
+        private static readonly Regex ValidIdentifierRegex = new Regex("^[a-zA-Z][a-zA-Z0-9]*$", RegexOptions.Compiled);
+
         private string _innerString;
 
         public IdentifierString()
@@ -21,12 +26,15 @@ namespace DevelApp.Utility.Model
         }
 
         /// <summary>
-        /// Throw exceptions if format is not proper
+        /// Throws if the string is null or not a valid identifier
         /// </summary>
-        /// <param name="identifierString"></param>
-        private void ValidateString(string identifierString)
+        private static void ValidateString(string identifierString)
         {
-            if (!Regex.IsMatch(identifierString, "^[a-zA-Z][a-zA-Z0-9]*$"))
+            if (identifierString is null)
+            {
+                throw new IdentifierStringException("IdentifierString cannot be null");
+            }
+            if (!ValidIdentifierRegex.IsMatch(identifierString))
             {
                 throw new IdentifierStringException($"IdentifierString is not in correct format of ascii letter followed by ascii letter or number: {identifierString}");
             }
@@ -55,12 +63,22 @@ namespace DevelApp.Utility.Model
 
         public bool Equals(IdentifierString other)
         {
-            return _innerString.Equals(other.ToString());
+            return !(other is null) && string.Equals(_innerString, other._innerString, StringComparison.Ordinal);
         }
 
         public bool Equals(string other)
         {
-            return _innerString.Equals(other);
+            return !(other is null) && string.Equals(_innerString, other, StringComparison.Ordinal);
+        }
+
+        public override bool Equals(object obj)
+        {
+            return obj is IdentifierString other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            return StringComparer.Ordinal.GetHashCode(_innerString);
         }
 
         public override string ToString()
@@ -68,12 +86,17 @@ namespace DevelApp.Utility.Model
             return _innerString;
         }
 
-        public override int GetHashCode()
+        #region Operators
+
+        public static bool operator ==(IdentifierString left, IdentifierString right)
         {
-            return 174925959 + EqualityComparer<string>.Default.GetHashCode(_innerString);
+            return left is null ? right is null : left.Equals(right);
         }
 
-        #region Implicit operators
+        public static bool operator !=(IdentifierString left, IdentifierString right)
+        {
+            return !(left == right);
+        }
 
         public static implicit operator IdentifierString(string rhs)
         {
@@ -87,5 +110,4 @@ namespace DevelApp.Utility.Model
 
         #endregion
     }
-
 }

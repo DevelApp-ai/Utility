@@ -1,5 +1,4 @@
-﻿using DevelApp.Utility.Exceptions;
-using System;
+using DevelApp.Utility.Exceptions;
 using System.Text;
 
 namespace DevelApp.Utility.Model
@@ -9,32 +8,34 @@ namespace DevelApp.Utility.Model
     /// </summary>
     public sealed class CodeBuilder
     {
-        private StringBuilder _stringBuilder;
-        private int _indentSpacesPerIndent;
+        private readonly StringBuilder _stringBuilder = new StringBuilder();
+        private readonly int _indentSpacesPerIndent;
+        private int _indent = 0;
 
         public CodeBuilder(int indentSpacesPerIndent = 4)
         {
-            _stringBuilder = new StringBuilder();
+            if (indentSpacesPerIndent < 0)
+            {
+                throw new CodeBuilderException($"indentSpacesPerIndent cannot be below 0: {indentSpacesPerIndent}");
+            }
             _indentSpacesPerIndent = indentSpacesPerIndent;
         }
 
         /// <summary>
-        /// Appends a line to internal string builder and returns itself to allow for chained calls
+        /// Appends an indented line and returns itself to allow for chained calls
         /// </summary>
-        /// <param name="line"></param>
-        /// <returns></returns>
         public CodeBuilder L(string line)
         {
-            if(_indent > 0)
+            if (_indent > 0)
             {
-                _stringBuilder.Append(new string(' ', _indent * _indentSpacesPerIndent));
+                _stringBuilder.Append(' ', _indent * _indentSpacesPerIndent);
             }
             _stringBuilder.AppendLine(line);
             return this;
         }
 
         /// <summary>
-        /// Appends an empty line
+        /// Appends an empty line and returns itself to allow for chained calls
         /// </summary>
         public CodeBuilder EmptyLine()
         {
@@ -43,22 +44,17 @@ namespace DevelApp.Utility.Model
         }
 
         /// <summary>
-        /// Called in the end of the code build to translate builder code into string
+        /// Called in the end of the code build to translate builder code into string.
+        /// Throws if the indent has not been reset to zero.
         /// </summary>
-        /// <returns></returns>
         public string Build()
         {
-            if (_indent == 0)
+            if (_indent != 0)
             {
-                return _stringBuilder.ToString();
+                throw new CodeBuilderException("Indent has not been reset to zero, indicating an error in generated code");
             }
-            else
-            {
-                throw new CodeBuilderException($"Indent has not been reset to zero indication an error in generated code");
-            }
+            return _stringBuilder.ToString();
         }
-
-        private int _indent = 0;
 
         /// <summary>
         /// Increase indent for the code
@@ -70,10 +66,14 @@ namespace DevelApp.Utility.Model
         }
 
         /// <summary>
-        /// Decrease indent for the code
+        /// Decrease indent for the code. Throws if the indent is already zero.
         /// </summary>
         public CodeBuilder IndentDecrease()
         {
+            if (_indent <= 0)
+            {
+                throw new CodeBuilderException("Indent cannot be decreased below zero, indicating an error in generated code");
+            }
             _indent -= 1;
             return this;
         }
