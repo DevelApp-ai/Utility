@@ -1,16 +1,19 @@
-﻿using DevelApp.Utility.Exceptions;
+using DevelApp.Utility.Exceptions;
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 
 namespace DevelApp.Utility.Model
 {
     /// <summary>
-    /// Represents a namespace where each dot represents a sub namespace
+    /// Represents a namespace where each dot represents a sub namespace.
+    /// Backslashes are translated to dots and spaces are removed.
+    /// Implements value equality so instances can be used as dictionary keys.
     /// </summary>
     public sealed class NamespaceString : IEquatable<NamespaceString>
     {
+        private static readonly Regex ValidNamespaceRegex = new Regex("^[a-zA-Z][a-zA-Z0-9\\.]*$", RegexOptions.Compiled);
+
         private string _innerString;
 
         public NamespaceString()
@@ -24,14 +27,19 @@ namespace DevelApp.Utility.Model
         }
 
         /// <summary>
-        /// Throw exceptions if format is not proper
+        /// Throws if the string is null or not a valid namespace after correction,
+        /// otherwise returns the corrected string
         /// </summary>
-        /// <param name="identifierString"></param>
-        private string ValidateAndCorrectString(string identifierString)
+        private static string ValidateAndCorrectString(string identifierString)
         {
-            string correctedString = identifierString.Replace('\\', '.').Replace(" ", "");
+            if (identifierString is null)
+            {
+                throw new NamespaceStringException("NamespaceString cannot be null");
+            }
 
-            if (!Regex.IsMatch(correctedString, "^[a-zA-Z][a-zA-Z0-9\\.]*$"))
+            string correctedString = identifierString.Replace('\\', '.').Replace(" ", string.Empty);
+
+            if (!ValidNamespaceRegex.IsMatch(correctedString))
             {
                 throw new NamespaceStringException($"NamespaceString is not in correct format of ascii letter followed by ascii letter, dot or number: {identifierString}");
             }
@@ -60,12 +68,22 @@ namespace DevelApp.Utility.Model
 
         public bool Equals(NamespaceString other)
         {
-            return _innerString.Equals(other.ToString());
+            return !(other is null) && string.Equals(_innerString, other._innerString, StringComparison.Ordinal);
         }
 
         public bool Equals(string other)
         {
-            return _innerString.Equals(other);
+            return !(other is null) && string.Equals(_innerString, other, StringComparison.Ordinal);
+        }
+
+        public override bool Equals(object obj)
+        {
+            return obj is NamespaceString other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            return StringComparer.Ordinal.GetHashCode(_innerString);
         }
 
         public override string ToString()
@@ -73,30 +91,29 @@ namespace DevelApp.Utility.Model
             return _innerString;
         }
 
-        public override int GetHashCode()
-        {
-            return 174925959 + EqualityComparer<string>.Default.GetHashCode(_innerString);
-        }
-
         /// <summary>
         /// Translates every dot in the namespace to a sub directory using Path.Combine
-        /// fx DevelApp.Modules.Default translates into DevelApp\Modules\Default on a windows machine
+        /// fx DevelApp.Modules.Default translates into DevelApp/Modules/Default on a unix machine
         /// </summary>
         public string ToFilePath
         {
             get
             {
-                string[] filePathParts = _innerString.Split('.');
-                string filePath = string.Empty;
-                for (int counter = 0; counter <= filePathParts.Length - 1; counter += 1)
-                {
-                    filePath = Path.Combine(filePath, filePathParts[counter]);
-                }
-                return filePath;
+                return Path.Combine(_innerString.Split('.'));
             }
         }
 
-        #region Implicit operators
+        #region Operators
+
+        public static bool operator ==(NamespaceString left, NamespaceString right)
+        {
+            return left is null ? right is null : left.Equals(right);
+        }
+
+        public static bool operator !=(NamespaceString left, NamespaceString right)
+        {
+            return !(left == right);
+        }
 
         public static implicit operator NamespaceString(string rhs)
         {
@@ -110,5 +127,4 @@ namespace DevelApp.Utility.Model
 
         #endregion
     }
-
 }

@@ -1,12 +1,19 @@
-﻿using DevelApp.Utility.Exceptions;
+using DevelApp.Utility.Exceptions;
 using System;
-using System.Collections.Generic;
 
 namespace DevelApp.Utility.Model
 {
+    /// <summary>
+    /// A string key with a maximum allowed length of 100 characters.
+    /// Implements value equality so instances can be used as dictionary keys.
+    /// </summary>
     public sealed class KeyString : IEquatable<KeyString>
     {
-        private static int MAX_KEY_LENGTH = 100;
+        /// <summary>
+        /// Maximum allowed length of the inner string
+        /// </summary>
+        public const int MaxKeyLength = 100;
+
         private string _innerKeyString;
 
         public KeyString()
@@ -21,14 +28,17 @@ namespace DevelApp.Utility.Model
         }
 
         /// <summary>
-        /// Throw exceptions if format is not proper
+        /// Throws if the string is null or longer than MaxKeyLength
         /// </summary>
-        /// <param name="keyString"></param>
-        private void ValidateString(string keyString)
+        private static void ValidateString(string keyString)
         {
-            if (keyString.Length > MAX_KEY_LENGTH)
+            if (keyString is null)
             {
-                throw new KeyStringException($"KeyString is above the allowed {MAX_KEY_LENGTH}");
+                throw new KeyStringException("KeyString cannot be null");
+            }
+            if (keyString.Length > MaxKeyLength)
+            {
+                throw new KeyStringException($"KeyString is above the allowed {MaxKeyLength} characters: {keyString}");
             }
         }
 
@@ -55,12 +65,22 @@ namespace DevelApp.Utility.Model
 
         public bool Equals(KeyString other)
         {
-            return _innerKeyString.Equals(other.ToString());
+            return !(other is null) && string.Equals(_innerKeyString, other._innerKeyString, StringComparison.Ordinal);
         }
 
         public bool Equals(string other)
         {
-            return _innerKeyString.Equals(other);
+            return !(other is null) && string.Equals(_innerKeyString, other, StringComparison.Ordinal);
+        }
+
+        public override bool Equals(object obj)
+        {
+            return obj is KeyString other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            return StringComparer.Ordinal.GetHashCode(_innerKeyString);
         }
 
         public override string ToString()
@@ -68,12 +88,17 @@ namespace DevelApp.Utility.Model
             return _innerKeyString;
         }
 
-        public override int GetHashCode()
+        #region Operators
+
+        public static bool operator ==(KeyString left, KeyString right)
         {
-            return -2062801960 + EqualityComparer<string>.Default.GetHashCode(_innerKeyString);
+            return left is null ? right is null : left.Equals(right);
         }
 
-        #region Implicit operators
+        public static bool operator !=(KeyString left, KeyString right)
+        {
+            return !(left == right);
+        }
 
         public static implicit operator KeyString(string rhs)
         {

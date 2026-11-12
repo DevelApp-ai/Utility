@@ -1,5 +1,6 @@
-﻿using DevelApp.Utility.Exceptions;
+using DevelApp.Utility.Exceptions;
 using System;
+using System.Globalization;
 
 namespace DevelApp.Utility.Model
 {
@@ -8,6 +9,7 @@ namespace DevelApp.Utility.Model
     /// Major: when you make incompatible API changes
     /// Minor: when you add functionality in a backwards compatible manner
     /// Patch: when you make backwards compatible bug fixes
+    /// Implements value equality and ordering so instances can be used as dictionary keys and sorted.
     /// </summary>
     public sealed class SemanticVersionNumber : IEquatable<SemanticVersionNumber>, IComparable<SemanticVersionNumber>
     {
@@ -16,11 +18,8 @@ namespace DevelApp.Utility.Model
         public int Patch { get; }
 
         /// <summary>
-        /// 
+        /// Throws if any part is below zero
         /// </summary>
-        /// <param name="major"></param>
-        /// <param name="minor"></param>
-        /// <param name="patch"></param>
         public SemanticVersionNumber(int major, int minor, int patch)
         {
             if (major < 0 || minor < 0 || patch < 0)
@@ -45,64 +44,112 @@ namespace DevelApp.Utility.Model
 
         public bool Equals(SemanticVersionNumber other)
         {
-            if (Major == other.Major && Minor == other.Minor && Patch == other.Patch)
-            {
-                return true;
-            }
-            else
-            {
-                return false;
-            }
+            return !(other is null) && Major == other.Major && Minor == other.Minor && Patch == other.Patch;
         }
 
+        public override bool Equals(object obj)
+        {
+            return obj is SemanticVersionNumber other && Equals(other);
+        }
+
+        /// <summary>
+        /// Orders by Major, then Minor, then Patch. Any instance sorts after null.
+        /// </summary>
         public int CompareTo(SemanticVersionNumber other)
         {
-            if (Major != other.Major)
+            if (other is null)
             {
-                return Math.Sign(Major - other.Major);
+                return 1;
             }
-            if (Minor != other.Minor)
+
+            int majorComparison = Major.CompareTo(other.Major);
+            if (majorComparison != 0)
             {
-                return Math.Sign(Minor - other.Minor);
+                return majorComparison;
             }
-            if (Patch != other.Patch)
+
+            int minorComparison = Minor.CompareTo(other.Minor);
+            if (minorComparison != 0)
             {
-                return Math.Sign(Patch - other.Patch);
+                return minorComparison;
             }
-            return 0;
+
+            return Patch.CompareTo(other.Patch);
         }
 
         public override int GetHashCode()
         {
-            int hashCode = -639545495;
-            hashCode = hashCode * -1521134295 + Major.GetHashCode();
-            hashCode = hashCode * -1521134295 + Minor.GetHashCode();
-            hashCode = hashCode * -1521134295 + Patch.GetHashCode();
-            return hashCode;
+            unchecked
+            {
+                int hashCode = 17;
+                hashCode = hashCode * 23 + Major.GetHashCode();
+                hashCode = hashCode * 23 + Minor.GetHashCode();
+                hashCode = hashCode * 23 + Patch.GetHashCode();
+                return hashCode;
+            }
         }
 
-        #region Implicit operators
+        #region Operators
 
+        public static bool operator ==(SemanticVersionNumber left, SemanticVersionNumber right)
+        {
+            return left is null ? right is null : left.Equals(right);
+        }
+
+        public static bool operator !=(SemanticVersionNumber left, SemanticVersionNumber right)
+        {
+            return !(left == right);
+        }
+
+        public static bool operator <(SemanticVersionNumber left, SemanticVersionNumber right)
+        {
+            if (left is null)
+            {
+                return !(right is null);
+            }
+            return left.CompareTo(right) < 0;
+        }
+
+        public static bool operator >(SemanticVersionNumber left, SemanticVersionNumber right)
+        {
+            return right < left;
+        }
+
+        public static bool operator <=(SemanticVersionNumber left, SemanticVersionNumber right)
+        {
+            return !(left > right);
+        }
+
+        public static bool operator >=(SemanticVersionNumber left, SemanticVersionNumber right)
+        {
+            return !(left < right);
+        }
+
+        /// <summary>
+        /// Parses a major.minor.patch string. Signs and whitespace are not allowed.
+        /// </summary>
         public static implicit operator SemanticVersionNumber(string rhs)
         {
+            if (rhs is null)
+            {
+                throw new SemanticVersionStringException("Versioning string cannot be null");
+            }
+
             string[] parts = rhs.Split('.');
             if (parts.Length != 3)
             {
                 throw new SemanticVersionStringException($"Versioning is not valid format major.minor.patch :{rhs}");
             }
 
-            int major = -1;
-            if (!int.TryParse(parts[0], out major))
+            if (!int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out int major))
             {
                 throw new SemanticVersionStringException($"Versioning is not valid format for major :{parts[0]}");
             }
-            int minor = -1;
-            if (!int.TryParse(parts[1], out minor))
+            if (!int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out int minor))
             {
                 throw new SemanticVersionStringException($"Versioning is not valid format for minor :{parts[1]}");
             }
-            int patch = -1;
-            if (!int.TryParse(parts[2], out patch))
+            if (!int.TryParse(parts[2], NumberStyles.None, CultureInfo.InvariantCulture, out int patch))
             {
                 throw new SemanticVersionStringException($"Versioning is not valid format for patch :{parts[2]}");
             }
@@ -120,9 +167,22 @@ namespace DevelApp.Utility.Model
             return new Version(rhs.Major, rhs.Minor, rhs.Patch);
         }
 
+        /// <summary>
+        /// An unspecified build number (patch) is treated as 0 and the revision is ignored.
+        /// </summary>
         public static implicit operator SemanticVersionNumber(Version rhs)
         {
-            return new SemanticVersionNumber(rhs.Major, rhs.Minor, rhs.Build);
+            if (rhs is null)
+            {
+                throw new SemanticVersionStringException("Version cannot be null");
+            }
+            if (rhs.Minor < 0)
+            {
+                throw new SemanticVersionStringException($"Version does not contain a minor number: {rhs}");
+            }
+
+            int patch = rhs.Build < 0 ? 0 : rhs.Build;
+            return new SemanticVersionNumber(rhs.Major, rhs.Minor, patch);
         }
 
         #endregion

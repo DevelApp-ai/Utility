@@ -1,10 +1,10 @@
 using System;
-using Xunit;
+using DevelApp.Utility.Model;
 using Newtonsoft.Json;
 using Shouldly;
-using DevelApp.Utility.Model;
+using Xunit;
 
-namespace Worflow.Core_UnitTest
+namespace Utility.UnitTests
 {
     public class ModelSerialization
     {
@@ -21,9 +21,21 @@ namespace Worflow.Core_UnitTest
         }
 
         [Fact]
+        public void IdentifierString_Serialization()
+        {
+            IdentifierString identifierString = new IdentifierString("SomeIdentifier");
+
+            string output = JsonConvert.SerializeObject(identifierString);
+
+            IdentifierString deserializedIdentifierString = JsonConvert.DeserializeObject<IdentifierString>(output);
+
+            deserializedIdentifierString.ShouldBe(identifierString);
+        }
+
+        [Fact]
         public void SemanticVersionNumber_Serialization()
         {
-            SemanticVersionNumber semanticVersionNumber = new SemanticVersionNumber(2,3,4);
+            SemanticVersionNumber semanticVersionNumber = new SemanticVersionNumber(2, 3, 4);
 
             string output = JsonConvert.SerializeObject(semanticVersionNumber);
 
