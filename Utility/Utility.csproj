@@ -3,13 +3,14 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <AssemblyName>DevelApp.Utility</AssemblyName>
+    <PackageId>DevelApp.Utility</PackageId>
     <RootNamespace>DevelApp.Utility</RootNamespace>
     <Authors>Lars Shakya Buch-Jepsen</Authors>
     <Company>DevelApp.ai ApS (CVR 33211740)</Company>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <RepositoryUrl>https://github.com/DevelApp-ai/Utility</RepositoryUrl>
     <RepositoryType>Git</RepositoryType>
-    <Copyright>Copyright © DevelApp.ai ApS 2020-2026</Copyright>
+    <Copyright>Copyright ɠDevelApp.ai ApS 2020-2026</Copyright>
     <Description>Contains several utility classes used in several projects</Description>
     <Version>1.1.0</Version>
   </PropertyGroup>
