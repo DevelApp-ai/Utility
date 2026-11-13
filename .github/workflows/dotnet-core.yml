@@ -56,5 +56,31 @@ jobs:
         with:
           user: ${{ secrets.NUGET_USER }}
       - name: Publish to NuGet.org
-        # Keyless trusted-publishing key from the login step above.
-        run: dotnet nuget push artifacts/*.nupkg --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+        # Keyless trusted-publishing key from the login step above. The push
+        # output is captured so the exact nuget.org response (status code +
+        # reason) lands in the job summary and the check-run annotations:
+        # the 2026-11-12/13 failures showed only 'exit code 1' with no
+        # visible error text anywhere. The API key itself is never echoed
+        # (length only).
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+        run: |
+          set +e
+          output=$(dotnet nuget push artifacts/*.nupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate 2>&1)
+          code=$?
+          set -e
+          echo "$output"
+          {
+            echo "### Publish to NuGet.org"
+            echo '```'
+            echo "$output"
+            echo '```'
+            echo "api key length: ${#NUGET_API_KEY}"
+            echo "exit code: $code"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" -ne 0 ]; then
+            tail=$(echo "$output" | grep -v '^[[:space:]]*
+ | tail -2 | tr '\n' ' ')
+            echo "::error::dotnet nuget push failed (exit $code), api key length ${#NUGET_API_KEY}: $tail"
+            exit "$code"
+          fi
