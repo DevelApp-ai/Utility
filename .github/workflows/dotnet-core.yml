@@ -23,12 +23,11 @@ jobs:
       - name: Test
         run: dotnet test --no-restore --verbosity normal
 
-  publish:
+  package:
+    name: Create NuGet Package
     needs: build-test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write # OIDC token issuance for NuGet trusted publishing
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,7 +36,104 @@ jobs:
         with:
           dotnet-version: 8.0.x
       - name: Pack
-        run: dotnet pack Utility/Utility.csproj --configuration Release --output artifacts
+        run: dotnet pack Utility/Utility.csproj --configuration Release --output nupkgs
+      - name: Upload package
+        uses: actions/upload-artifact@v6
+        with:
+          name: nuget-package
+          path: nupkgs/*.nupkg
+
+  sign:
+    # Branch pushes only (org decisions #38 + #73) - PR builds skip signing so
+    # no TOTP window is spent on PRs. Signing is REQUIRED, not optional:
+    # DevelApp.Utility on nuget.org enforces the package signature
+    # requirement, so an unsigned push is rejected with 400 "This package
+    # must be signed with a registered certificate." (run 43401634922,
+    # 2026-11-13).
+    name: Sign NuGet Package (Certum cloud)
+    runs-on: windows-latest
+    needs: package
+    steps:
+    - name: Download package
+      uses: actions/download-artifact@v6
+      with:
+        name: nuget-package
+        path: nupkgs/
+    - name: Validate signing inputs
+      # Fail fast BEFORE the SimplySign login consumes a TOTP window
+      # (values are never echoed).
+      shell: pwsh
+      env:
+        CERTUM_SIMPLYSIGN_USERID: ${{ secrets.CERTUM_SIMPLYSIGN_USERID }}
+        CERTUM_SIMPLYSIGN_OTP_URI: ${{ secrets.CERTUM_SIMPLYSIGN_OTP_URI }}
+        CERTUM_THUMBPRINT: ${{ secrets.CODE_SIGNING_CERT_THUMBPRINT }}
+        CERTUM_FINGERPRINT_SHA256: ${{ secrets.CODE_SIGNING_CERT_FINGERPRINT_SHA256 }}
+      run: |
+        foreach ($name in @('CERTUM_SIMPLYSIGN_USERID','CERTUM_SIMPLYSIGN_OTP_URI','CERTUM_THUMBPRINT','CERTUM_FINGERPRINT_SHA256')) {
+          if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+            throw "Missing signing input: $name (org secrets setup, decision #38)"
+          }
+        }
+        $tp = $env:CERTUM_THUMBPRINT -replace '\s',''
+        if ($tp -notmatch '^[0-9A-Fa-f]{40}$') { throw 'Certificate thumbprint must be exactly 40 hex characters (CODE_SIGNING_CERT_THUMBPRINT org secret).' }
+        $fp = $env:CERTUM_FINGERPRINT_SHA256 -replace '\s',''
+        if ($fp -notmatch '^[0-9A-Fa-f]{64}$') { throw 'Certificate fingerprint must be exactly 64 hex characters (CODE_SIGNING_CERT_FINGERPRINT_SHA256 org secret, decision #73 amendment).' }
+        $uri = $null
+        if (-not [Uri]::TryCreate($env:CERTUM_SIMPLYSIGN_OTP_URI, [UriKind]::Absolute, [ref]$uri) -or
+            $uri.Scheme -ne 'otpauth' -or $uri.Host -ne 'totp' -or
+            $uri.Query -notmatch '[?&]secret=[A-Za-z2-7]+=*(&|$)') {
+          throw 'CERTUM_SIMPLYSIGN_OTP_URI must be the full otpauth://totp provisioning URI (org secrets setup, decision #38).'
+        }
+    - name: Connect to Certum SimplySign
+      # Pinned by full commit SHA; proven by the LocalTaskhandler signing
+      # test (run 43089090840, 2026-11-11) and shaztechio/bunyi-app #171.
+      # Never sees CERTUM_SIMPLYSIGN_PASSWORD - that secret stays dormant.
+      uses: dismine/windows-app-signing-setup-action@89ae3b032d4bc7a5b98d1a42a34e61ecb6faad64
+      with:
+        certum-username: ${{ secrets.CERTUM_SIMPLYSIGN_USERID }}
+        certum-otp-uri: ${{ secrets.CERTUM_SIMPLYSIGN_OTP_URI }}
+        certum-key-id: ${{ secrets.CODE_SIGNING_CERT_THUMBPRINT }}
+        capture-diagnostics: 'false'
+    - name: Sign NuGet package
+      # SHA-256 fingerprint interface (decision #73 amendment, 2026-11-12):
+      # works identically on .NET 9 and .NET 10 SDKs; no SDK pin needed.
+      shell: pwsh
+      env:
+        CERTUM_FINGERPRINT_SHA256: ${{ secrets.CODE_SIGNING_CERT_FINGERPRINT_SHA256 }}
+      run: |
+        $fp = ($env:CERTUM_FINGERPRINT_SHA256 -replace '\s','').ToUpperInvariant()
+        $packages = @(Get-ChildItem nupkgs/*.nupkg)
+        if (-not $packages.Count) { throw 'No package found to sign.' }
+        foreach ($p in $packages) {
+          dotnet nuget sign $p.FullName --certificate-fingerprint $fp --timestamper http://time.certum.pl
+          if ($LASTEXITCODE -ne 0) { throw "Signing failed (exit $LASTEXITCODE): $($p.Name)" }
+        }
+    - name: Verify signature (gate)
+      # Any invalid signature fails the job and blocks publishing.
+      shell: pwsh
+      run: |
+        foreach ($p in @(Get-ChildItem nupkgs/*.nupkg)) {
+          dotnet nuget verify $p.FullName
+          if ($LASTEXITCODE -ne 0) { throw "Signature verification failed (exit $LASTEXITCODE): $($p.Name)" }
+        }
+    - name: Upload signed package
+      uses: actions/upload-artifact@v6
+      with:
+        name: nuget-package-signed
+        path: nupkgs/*.nupkg
+
+  publish:
+    needs: [package, sign]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # OIDC token issuance for NuGet trusted publishing
+    steps:
+      - name: Download signed package
+        uses: actions/download-artifact@v6
+        with:
+          name: nuget-package-signed
+          path: nupkgs/
       - name: NuGet.org login (OIDC -> temp API key)
         # Trusted publishing (org standard; the long-lived NUGET_API_KEY secret is
         # gone): this job's GitHub OIDC token is exchanged for a ~1-hour nuget.org
@@ -66,7 +162,7 @@ jobs:
           NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
         run: |
           set +e
-          output=$(dotnet nuget push artifacts/*.nupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate 2>&1)
+          output=$(dotnet nuget push nupkgs/*.nupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate 2>&1)
           code=$?
           set -e
           echo "$output"
