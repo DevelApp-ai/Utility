@@ -79,8 +79,7 @@ jobs:
             echo "exit code: $code"
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "$code" -ne 0 ]; then
-            tail=$(echo "$output" | grep -v '^[[:space:]]*
- | tail -2 | tr '\n' ' ')
-            echo "::error::dotnet nuget push failed (exit $code), api key length ${#NUGET_API_KEY}: $tail"
+            err_tail=$(echo "$output" | grep -v '^[[:space:]]*$' | tail -2 | tr '\n' ' ')
+            echo "::error::dotnet nuget push failed (exit $code), api key length ${#NUGET_API_KEY}: $err_tail"
             exit "$code"
           fi
